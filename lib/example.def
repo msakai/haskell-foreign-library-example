@@ -1,0 +1,4 @@
+EXPORTS
+example_init
+example_count
+example_release

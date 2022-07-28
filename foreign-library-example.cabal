@@ -1,0 +1,51 @@
+cabal-version: 2.4
+name:           foreign-library-example
+version:        0.1.0.0
+description:    Please see the README on GitHub at <https://github.com/msakai/haskell/haskellforeign-library-example#readme>
+homepage:       https://github.com/msakai/foreign-library-example#readme
+bug-reports:    https://github.com/msakai/foreign-library-example/issues
+author:         Masahiro Sakai
+maintainer:     masahiro.sakai@gmail.com
+copyright:      2022 Masahiro Sakai
+license:        BSD-3-Clause
+license-file:   LICENSE
+build-type:     Simple
+extra-source-files:
+    README.md
+    ChangeLog.md
+    lib/example.h
+    lib/example.map
+
+source-repository head
+  type: git
+  location: https://github.com/msakai/foreign-library-example
+
+library
+  exposed-modules:
+      Lib
+  other-modules:
+      Paths_foreign_library_example
+  hs-source-dirs:
+      src
+  build-depends:
+      base >=4.7 && <5
+  default-language: Haskell2010
+
+foreign-library example
+  type: native-shared
+  if os(Windows)
+    options: standalone
+    mod-def-file: lib//example.def
+  if os(Linux)
+    ld-options: -Wl,--version-script=lib/example.map
+  build-depends:
+    base,
+    containers,
+    foreign-library-example
+  hs-source-dirs:   lib
+  include-dirs:     lib
+  c-sources:        lib/cbits.c
+  cc-options:       -Wall
+  includes:         example.h
+  other-modules:    ForeignLib
+  default-language: Haskell2010  

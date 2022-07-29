@@ -16,6 +16,13 @@ jobs:
             resolver: lts-19.16
           - ghc: '8.10.7'
             resolver: lts-18.28
+        # The following PR is necessary for building foreign library using GHC >=9.0 on windows
+        # https://github.com/haskell/cabal/pull/7764
+        exclude:
+          - ghc: '9.2.3'
+            os: windows-latest
+          - ghc: '9.0.2'
+            os: windows-latest
     steps:
       - uses: actions/checkout@v2
         with:

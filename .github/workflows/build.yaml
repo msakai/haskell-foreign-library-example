@@ -90,19 +90,16 @@ jobs:
       # https://github.com/haskell/cabal/commit/f1560d125fe92a92ab657e0538810793c019d953
       - name: Update cabal-install
         shell: bash
+        if: runner.os == 'Windows'
         run: |
           ghcup config add-release-channel https://raw.githubusercontent.com/haskell/ghcup-metadata/master/ghcup-prereleases-0.0.7.yaml
           ghcup install cabal 3.8.0.20220526
           ghcup set cabal 3.8.0.20220526
+          echo "/c/ghcup/bin" >> $GITHUB_PATH
 
       - name: Build
         shell: bash
         run: |
-          if [[ ${{ runner.os }} = "Windows" ]]; then
-            PATH=/c/ghcup/bin:$PATH
-          else
-            PATH=~/.ghcup/bin:$PATH
-          fi
           cabal --version
           cabal configure
           cabal build

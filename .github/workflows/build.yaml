@@ -1,0 +1,152 @@
+on: [push, pull_request]
+name: build
+jobs:
+  build-stack:
+    name: build-stack
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        ghc: ['9.2.3', '9.0.2', '8.10.7']
+        include:
+          - ghc: '9.2.3'
+            resolver: nightly-2022-07-23
+          - ghc: '9.0.2'
+            resolver: lts-19.16
+          - ghc: '8.10.7'
+            resolver: lts-18.28
+    steps:
+      - uses: actions/checkout@v2
+        with:
+          submodules: true
+
+      - uses: haskell/actions/setup@v1
+        name: Setup Haskell
+        with:
+          ghc-version: ${{ matrix.ghc }}
+          enable-stack: true
+          stack-version: 'latest'
+
+      # https://github.com/commercialhaskell/stack/issues/5405
+      - name: Clear setup-exe-cache directory
+        if: runner.os == 'macOS'
+        continue-on-error: true
+        run: rm -r ~/.stack/setup-exe-cache
+
+      - name: Build
+        id: build
+        shell: bash
+        run: |
+          echo "resolver: ${{ matrix.resolver }}" > stack.yaml
+          echo "system-ghc: true" >> stack.yaml
+          stack build
+          if [[ ${{ runner.os }} = "Windows" ]]; then
+            echo "::set-output name=lib-dir::$(cygpath -u $(stack path --local-install-root))/lib"
+          else
+            echo "::set-output name=lib-dir::$(stack path --local-install-root)/lib"
+          fi
+          if [[ ${{ runner.os }} = "macOS" ]]; then
+            echo "::set-output name=lib::$(stack path --local-install-root)/lib/libexample.dylib"
+          elif [[ ${{ runner.os }} = "Windows" ]]; then
+            echo "::set-output name=lib::$(cygpath -u $(stack path --local-install-root))/lib/example.dll"
+          else
+            echo "::set-output name=lib::$(stack path --local-install-root)/lib/libexample.so"
+          fi
+
+      - name: Check foreign library dependencies
+        continue-on-error: true
+        shell: bash
+        run: |
+          if [[ ${{ runner.os }} = "macOS" ]]; then
+            otool -L ${{ steps.build.outputs.lib }}
+          else
+            ldd ${{ steps.build.outputs.lib }}
+          fi
+
+      - name: Test calling the foreign library
+        shell: bash
+        run: |
+          stack exec -- gcc test.c -Ilib -L${{ steps.build.outputs.lib-dir }} -lexample -o test
+          if [[ ${{ runner.os }} = "macOS" ]]; then
+            install_name_tool -add_rpath ${{ steps.build.outputs.lib-dir }} test
+          elif [[ ${{ runner.os }} = "Windows" ]]; then
+            export PATH=${{ steps.build.outputs.lib-dir }}:$PATH
+          else
+            export LD_LIBRARY_PATH=${{ steps.build.outputs.lib-dir }}:$LD_LIBRARY_PATH
+          fi
+          ./test
+
+
+  build-cabal:
+    name: build-cabal
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        ghc: ['9.2.3', '9.0.2', '8.10.7']
+    steps:
+      - uses: actions/checkout@v2
+        with:
+          submodules: true
+
+      - uses: haskell/actions/setup@v1
+        name: Setup Haskell
+        with:
+          ghc-version: ${{ matrix.ghc }}
+          enable-stack: false
+
+      # GHC >=9.0 requires the following commit to build foreign library on windows
+      # https://github.com/haskell/cabal/commit/f1560d125fe92a92ab657e0538810793c019d953
+      - name: Update cabal-install
+        shell: bash
+        if: runner.os == 'Windows'
+        run: |
+          ghcup config add-release-channel https://raw.githubusercontent.com/haskell/ghcup-metadata/master/ghcup-prereleases-0.0.7.yaml
+          ghcup install cabal 3.8.0.20220526
+          ghcup set cabal 3.8.0.20220526
+          echo "/c/ghcup/bin" >> $GITHUB_PATH
+
+      - name: Build
+        id: build
+        shell: bash
+        run: |
+          cabal --version
+          cabal configure
+          cabal build
+          if [[ ${{ runner.os }} = "Windows" ]]; then
+            echo "::set-output name=lib-dir::$(dirname $(cygpath -u $(cabal list-bin example)))"
+          else
+            echo "::set-output name=lib-dir::$(dirname $(cabal list-bin example))"
+          fi
+          if [[ ${{ runner.os }} = "macOS" ]]; then
+            echo "::set-output name=lib::$(dirname $(cabal list-bin example))/libexample.dylib"
+          elif [[ ${{ runner.os }} = "Windows" ]]; then
+            echo "::set-output name=lib::$(dirname $(cygpath -u $(cabal list-bin example)))/example.dll"
+          else
+            echo "::set-output name=lib::$(dirname $(cabal list-bin example))/libexample.so"
+          fi
+
+      - name: Check foreign library dependencies
+        continue-on-error: true
+        shell: bash
+        run: |
+          if [[ ${{ runner.os }} = "macOS" ]]; then
+            otool -L ${{ steps.build.outputs.lib }}
+          else
+            ldd ${{ steps.build.outputs.lib }}
+          fi
+
+      - name: Test calling the foreign library
+        shell: bash
+        run: |
+          cabal exec -- gcc test.c -Ilib -L${{ steps.build.outputs.lib-dir }} -lexample -o test
+          if [[ ${{ runner.os }} = "macOS" ]]; then
+            install_name_tool -add_rpath ${{ steps.build.outputs.lib-dir }} test
+          elif [[ ${{ runner.os }} = "Windows" ]]; then
+            export PATH=${{ steps.build.outputs.lib-dir }}:$PATH
+          else
+            export LD_LIBRARY_PATH=${{ steps.build.outputs.lib-dir }}:$LD_LIBRARY_PATH
+          fi
+          ./test

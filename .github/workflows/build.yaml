@@ -97,8 +97,8 @@ jobs:
           ghc-version: ${{ matrix.ghc }}
           enable-stack: false
 
-      # GHC >=9.0 requires the following commit to build foreign library on windows
-      # https://github.com/haskell/cabal/commit/f1560d125fe92a92ab657e0538810793c019d953
+      # The following PR is necessary for building foreign library using GHC >=9.0 on windows
+      # https://github.com/haskell/cabal/pull/7764
       - name: Update cabal-install
         shell: bash
         if: runner.os == 'Windows'
